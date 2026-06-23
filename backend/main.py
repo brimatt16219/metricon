@@ -4,6 +4,7 @@ from pydantic import BaseModel
 import os
 from dotenv import load_dotenv
 from compare import compare_items
+from discover import discover_items
 
 load_dotenv()
 
@@ -28,7 +29,16 @@ class CompareRequest(BaseModel):
     items: list[str]
     category: str | None = None
 
+class DiscoverRequest(BaseModel):
+    category: str
+    count: int | None = 5
+
 @app.post("/compare")
 def compare(request: CompareRequest):
     result = compare_items(request.items, request.category)
+    return result
+
+@app.post("/discover")
+def discover(request: DiscoverRequest):
+    result = discover_items(request.category, request.count or 5)
     return result
