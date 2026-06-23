@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import os
 from dotenv import load_dotenv
+from compare import compare_items
 
 load_dotenv()
 
@@ -29,7 +30,5 @@ class CompareRequest(BaseModel):
 
 @app.post("/compare")
 def compare(request: CompareRequest):
-    return {
-        "items": request.items,
-        "result": "comparison coming soon"
-    }
+    result = compare_items(request.items, request.category)
+    return result
