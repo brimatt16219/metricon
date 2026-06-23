@@ -1,177 +1,73 @@
-"use client";
-
-import { useState } from "react";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import ComparisonGrid from "@/components/ComparisonGrid";
-import ComparisonCharts from "@/components/ComparisonCharts";
 
-interface ComparisonResult {
-  items: string[];
-  attributes: string[];
-  data: Record<string, string | number>[];
-  recommendation: string;
-}
-
-export default function Home() {
-  const [category, setCategory] = useState("");
-  const [itemInput, setItemInput] = useState("");
-  const [error, setError] = useState("");
-  const [items, setItems] = useState<string[]>([]);
-  const [result, setResult] = useState<ComparisonResult | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [view, setView] = useState<"grid" | "charts">("grid");
-  const [discovering, setDiscovering] = useState(false);
-
-  const addItem = () => {
-    if (itemInput.trim() && !items.includes(itemInput.trim())) {
-      setItems([...items, itemInput.trim()]);
-      setItemInput("");
-    }
-  };
-
-  const removeItem = (item: string) => {
-    setItems(items.filter((i) => i !== item));
-  };
-
-  const handleCompare = async () => {
-    if (items.length < 2) return;
-    setLoading(true);
-    setResult(null);
-    setError("");
-
-    try {
-      const res = await fetch("http://localhost:8000/compare", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ items, category: category || null }),
-      });
-
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.detail || "Comparison failed.");
-      }
-
-      const data = await res.json();
-      setResult(data);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Comparison failed.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleDiscover = async () => {
-    if (!category.trim()) return;
-    setDiscovering(true);
-    setError("");
-
-    try {
-      const res = await fetch("http://localhost:8000/discover", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ category }),
-      });
-
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.detail || "Search failed.");
-      }
-
-      const data = await res.json();
-      setItems(data.items);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Search failed.");
-    } finally {
-      setDiscovering(false);
-    }
-  };
-
+export default function LandingPage() {
   return (
-    <main className="max-w-5xl mx-auto px-4 py-12">
-      <h1 className="text-4xl font-bold mb-2">metricon</h1>
-      <p className="text-muted-foreground mb-8">
-        Compare anything — products, schools, services, and more.
-      </p>
-
-      <div className="space-y-4 mb-6">
-        <div className="flex gap-2">
-          <Input
-            placeholder="Category (e.g. GPU, university, electric car...)"
-            value={category}
-            onChange={(e) => setCategory(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleDiscover()}
-          />
-          <Button onClick={handleDiscover} disabled={!category.trim() || discovering}>
-            {discovering ? "Searching..." : "Search"}
+    <main>
+      {/* Hero */}
+      <section className="max-w-5xl mx-auto px-4 pt-24 pb-20 text-center">
+        <span className="inline-block text-sm font-medium text-muted-foreground border rounded-full px-4 py-1 mb-6">
+          AI-powered comparisons
+        </span>
+        <h1 className="text-5xl sm:text-6xl font-bold tracking-tight mb-6 max-w-3xl mx-auto">
+          Compare anything,
+          <span className="text-primary"> instantly</span>.
+        </h1>
+        <p className="text-lg text-muted-foreground max-w-2xl mx-auto mb-8">
+          metricon uses AI to research and compare products, schools, services —
+          anything with attributes worth weighing. Get structured breakdowns,
+          rich charts, and a clear recommendation in seconds.
+        </p>
+        <div className="flex gap-3 justify-center">
+          <Button asChild size="lg">
+            <Link href="/app">Start comparing</Link>
+          </Button>
+          <Button asChild variant="outline" size="lg">
+            <Link href="#features">Learn more</Link>
           </Button>
         </div>
+      </section>
 
-        <div className="flex gap-2">
-          <Input
-            placeholder="Add a specific item to compare..."
-            value={itemInput}
-            onChange={(e) => setItemInput(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && addItem()}
-          />
-          <Button onClick={addItem}>Add</Button>
-        </div>
-
-        <div className="flex flex-wrap gap-2">
-          {items.map((item) => (
-            <Badge
-              key={item}
-              variant="secondary"
-              className="cursor-pointer"
-              onClick={() => removeItem(item)}
-            >
-              {item} ✕
-            </Badge>
+      {/* Features */}
+      <section id="features" className="max-w-5xl mx-auto px-4 py-20">
+        <h2 className="text-3xl font-bold text-center mb-12">
+          Everything you need to decide with confidence
+        </h2>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+          {[
+            {
+              title: "AI-powered discovery",
+              body: "Type a category and metricon searches the web to find the most relevant, current items to compare.",
+            },
+            {
+              title: "Structured breakdowns",
+              body: "Every comparison returns clean, consistent attributes across all items — no more juggling browser tabs.",
+            },
+            {
+              title: "Rich visualizations",
+              body: "Explore the data your way with bar, radar, scatter, heatmap, and many more chart types.",
+            },
+          ].map((f) => (
+            <div key={f.title} className="rounded-lg border bg-card p-6">
+              <h3 className="font-semibold text-lg mb-2">{f.title}</h3>
+              <p className="text-sm text-muted-foreground">{f.body}</p>
+            </div>
           ))}
         </div>
-      </div>
+      </section>
 
-      {error && (
-        <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-3 mb-4">
-          <p className="text-sm text-destructive">{error}</p>
+      {/* CTA */}
+      <section className="max-w-5xl mx-auto px-4 py-20">
+        <div className="rounded-2xl border bg-card px-8 py-16 text-center">
+          <h2 className="text-3xl font-bold mb-4">Ready to compare?</h2>
+          <p className="text-muted-foreground mb-8 max-w-xl mx-auto">
+            Start your first comparison now — no sign-up required.
+          </p>
+          <Button asChild size="lg">
+            <Link href="/app">Launch metricon</Link>
+          </Button>
         </div>
-      )}
-
-      <Button
-        onClick={handleCompare}
-        disabled={items.length < 2 || loading}
-        className="w-full mb-8"
-      >
-        {loading ? "Comparing..." : "Compare"}
-      </Button>
-
-      {result && (
-        <div className="space-y-6">
-          <div className="flex gap-2">
-            <Button
-              variant={view === "grid" ? "default" : "outline"}
-              onClick={() => setView("grid")}
-            >
-              Grid
-            </Button>
-            <Button
-              variant={view === "charts" ? "default" : "outline"}
-              onClick={() => setView("charts")}
-            >
-              Charts
-            </Button>
-          </div>
-
-          {view === "grid" && <ComparisonGrid result={result} />}
-          {view === "charts" && <ComparisonCharts result={result} />}
-
-          <div className="rounded-lg border p-4 bg-muted/50">
-            <p className="text-sm font-medium mb-1">Recommendation</p>
-            <p className="text-sm text-muted-foreground">{result.recommendation}</p>
-          </div>
-        </div>
-      )}
+      </section>
     </main>
   );
 }
