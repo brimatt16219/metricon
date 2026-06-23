@@ -17,10 +17,12 @@ interface ComparisonResult {
 export default function Home() {
   const [category, setCategory] = useState("");
   const [itemInput, setItemInput] = useState("");
+  const [error, setError] = useState("");
   const [items, setItems] = useState<string[]>([]);
   const [result, setResult] = useState<ComparisonResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [view, setView] = useState<"grid" | "charts">("grid");
+  const [discovering, setDiscovering] = useState(false);
 
   const addItem = () => {
     if (itemInput.trim() && !items.includes(itemInput.trim())) {
@@ -37,16 +39,53 @@ export default function Home() {
     if (items.length < 2) return;
     setLoading(true);
     setResult(null);
+    setError("");
 
-    const res = await fetch("http://localhost:8000/compare", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ items, category: category || null }),
-    });
+    try {
+      const res = await fetch("http://localhost:8000/compare", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ items, category: category || null }),
+      });
 
-    const data = await res.json();
-    setResult(data);
-    setLoading(false);
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.detail || "Comparison failed.");
+      }
+
+      const data = await res.json();
+      setResult(data);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Comparison failed.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDiscover = async () => {
+    if (!category.trim()) return;
+    setDiscovering(true);
+    setError("");
+
+    try {
+      const res = await fetch("http://localhost:8000/discover", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ category }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.detail || "Search failed.");
+      }
+
+      const data = await res.json();
+      setItems(data.items);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Search failed.");
+    } finally {
+      setDiscovering(false);
+    }
   };
 
   return (
@@ -57,11 +96,17 @@ export default function Home() {
       </p>
 
       <div className="space-y-4 mb-6">
-        <Input
-          placeholder="Category (e.g. GPU, university, electric car...)"
-          value={category}
-          onChange={(e) => setCategory(e.target.value)}
-        />
+        <div className="flex gap-2">
+          <Input
+            placeholder="Category (e.g. GPU, university, electric car...)"
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleDiscover()}
+          />
+          <Button onClick={handleDiscover} disabled={!category.trim() || discovering}>
+            {discovering ? "Searching..." : "Search"}
+          </Button>
+        </div>
 
         <div className="flex gap-2">
           <Input
@@ -86,6 +131,12 @@ export default function Home() {
           ))}
         </div>
       </div>
+
+      {error && (
+        <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-3 mb-4">
+          <p className="text-sm text-destructive">{error}</p>
+        </div>
+      )}
 
       <Button
         onClick={handleCompare}
