@@ -1,7 +1,8 @@
-from fastapi import FastAPI
+import os
+import json
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-import os
 from dotenv import load_dotenv
 from compare import compare_items
 from discover import discover_items
@@ -35,10 +36,20 @@ class DiscoverRequest(BaseModel):
 
 @app.post("/compare")
 def compare(request: CompareRequest):
-    result = compare_items(request.items, request.category)
-    return result
+    try:
+        result = compare_items(request.items, request.category)
+        return result
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=502, detail="The AI returned an invalid response. Please try again.")
+    except Exception:
+        raise HTTPException(status_code=502, detail="Something went wrong while comparing. Please try again.")
 
 @app.post("/discover")
 def discover(request: DiscoverRequest):
-    result = discover_items(request.category, request.count or 5)
-    return result
+    try:
+        result = discover_items(request.category, request.count or 5)
+        return result
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=502, detail="The AI returned an invalid response. Please try again.")
+    except Exception:
+        raise HTTPException(status_code=502, detail="Search failed. Please try again in a moment.")
