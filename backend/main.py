@@ -1,6 +1,13 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
+TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
 
 app = FastAPI()
 
