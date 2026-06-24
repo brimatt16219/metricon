@@ -1,13 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import dynamic from "next/dynamic";
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
-  BarChart, Bar, RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
-  LineChart, Line, ScatterChart, Scatter, XAxis, YAxis, CartesianGrid,
-  Tooltip, Legend, ResponsiveContainer, Cell, Treemap,
-} from "recharts";
+  CHART_REGISTRY,
+  DEFAULT_CHART_KEYS,
+  type ChartContext,
+  type ChartPalette,
+} from "@/components/charts/registry";
+
+const ReactECharts = dynamic(() => import("echarts-for-react"), { ssr: false });
 
 interface ComparisonResult {
   items: string[];
@@ -16,57 +20,149 @@ interface ComparisonResult {
   recommendation: string;
 }
 
-const COLORS = ["#6366f1", "#f59e0b", "#10b981", "#ef4444", "#3b82f6", "#ec4899"];
+// Reads the theme's chart colors from CSS variables, re-reading whenever the
+// html element's class changes (i.e. when dark mode is toggled).
+function useChartPalette() {
+  const [palette, setPalette] = useState<ChartPalette | null>(null);
 
-type ChartType = "bar" | "grouped-bar" | "radar" | "line" | "scatter" | "bubble" | "heatmap" | "treemap" | "lollipop";
+  useEffect(() => {
+    const read = () => {
+      const root = getComputedStyle(document.documentElement);
+      const v = (name: string) => root.getPropertyValue(name).trim();
+      setPalette({
+        colors: [
+          v("--chart-1"),
+          v("--chart-2"),
+          v("--chart-3"),
+          v("--chart-4"),
+          v("--chart-5"),
+        ],
+        text: v("--foreground"),
+        axis: v("--muted-foreground"),
+      });
+    };
 
-const CHART_TYPES: { key: ChartType; label: string }[] = [
-  { key: "bar", label: "Bar" },
-  { key: "grouped-bar", label: "Grouped Bar" },
-  { key: "radar", label: "Radar" },
-  { key: "line", label: "Line" },
-  { key: "scatter", label: "Scatter" },
-  { key: "bubble", label: "Bubble" },
-  { key: "heatmap", label: "Heatmap" },
-  { key: "treemap", label: "Treemap" },
-  { key: "lollipop", label: "Lollipop" },
-];
+    read();
+    const observer = new MutationObserver(read);
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["class"],
+    });
+    return () => observer.disconnect();
+  }, []);
+
+  return palette;
+}
+
+// A single chart slot: a type picker plus the rendered chart.
+function ChartSlot({
+  chartKey,
+  ctx,
+  applicableKeys,
+  onChangeType,
+  onRemove,
+}: {
+  chartKey: string;
+  ctx: ChartContext;
+  applicableKeys: string[];
+  onChangeType: (key: string) => void;
+  onRemove: () => void;
+}) {
+  const def = CHART_REGISTRY.find((d) => d.key === chartKey);
+  const numKey = ctx.numericalAttributes.join(",");
+  const [axes, setAxes] = useState<Record<string, string>>({});
+
+  // Reset metric choices to defaults when the chart type or numeric columns change.
+  useEffect(() => {
+    if (!def) return;
+    const next: Record<string, string> = {};
+    def.roles.forEach((role, i) => {
+      next[role.id] = ctx.numericalAttributes[i] ?? ctx.numericalAttributes[0];
+    });
+    setAxes(next);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chartKey, numKey]);
+
+  const usable = def && ctx.numericalAttributes.length >= def.minNumeric;
+  const slotCtx: ChartContext = { ...ctx, axes };
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
+        <div className="flex flex-wrap items-center gap-2">
+          <select
+            value={chartKey}
+            onChange={(e) => onChangeType(e.target.value)}
+            className="h-9 rounded-md border bg-background px-2 text-sm"
+          >
+            {applicableKeys.map((key) => {
+              const d = CHART_REGISTRY.find((c) => c.key === key)!;
+              return (
+                <option key={key} value={key}>
+                  {d.label}
+                </option>
+              );
+            })}
+          </select>
+
+          {def?.roles.map((role) => (
+            <select
+              key={role.id}
+              value={axes[role.id] ?? ""}
+              onChange={(e) => setAxes({ ...axes, [role.id]: e.target.value })}
+              className="h-9 rounded-md border bg-background px-2 text-xs"
+              title={role.label}
+            >
+              {ctx.numericalAttributes.map((attr) => (
+                <option key={attr} value={attr}>
+                  {role.label}: {attr}
+                </option>
+              ))}
+            </select>
+          ))}
+        </div>
+
+        <button
+          onClick={onRemove}
+          className="text-muted-foreground hover:text-destructive text-sm"
+          aria-label="Remove chart"
+        >
+          ✕
+        </button>
+      </CardHeader>
+      <CardContent>
+        {usable ? (
+          <ReactECharts
+            key={chartKey}
+            option={def!.build(slotCtx)}
+            opts={{ renderer: "svg" }}
+            style={{ height: 360 }}
+            notMerge
+          />
+        ) : (
+          <p className="py-12 text-center text-sm text-muted-foreground">
+            This chart needs more numerical attributes.
+          </p>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
 
 export default function ComparisonCharts({ result }: { result: ComparisonResult }) {
-  const [chartType, setChartType] = useState<ChartType>("bar");
+  const palette = useChartPalette();
 
   const numericalAttributes = result.attributes.filter((attr) =>
     result.data.every((item) => typeof item[attr] === "number")
   );
 
-  const attributeData = numericalAttributes.map((attr) => {
-    const entry: Record<string, string | number> = { attribute: attr };
-    result.data.forEach((item) => {
-      entry[item.name as string] = item[attr] as number;
-    });
-    return entry;
-  });
+  const applicableKeys = CHART_REGISTRY.filter(
+    (d) => numericalAttributes.length >= d.minNumeric
+  ).map((d) => d.key);
 
-  const scatterData = result.data.map((item, i) => ({
-    name: item.name as string,
-    x: item[numericalAttributes[0]] as number,
-    y: item[numericalAttributes[1]] as number,
-    z: numericalAttributes[2] ? (item[numericalAttributes[2]] as number) : 10 + i * 5,
-  }));
-
-  const heatmapMax = Math.max(
-    ...result.data.flatMap((item) =>
-      numericalAttributes.map((attr) => Number(item[attr]) || 0)
-    )
+  const [slots, setSlots] = useState<string[]>(() =>
+    DEFAULT_CHART_KEYS.filter((k) => CHART_REGISTRY.some((d) => d.key === k))
   );
-
-  const treemapData = result.data.map((item) => ({
-    name: item.name as string,
-    children: numericalAttributes.map((attr) => ({
-      name: `${attr}`,
-      size: Number(item[attr]) || 0,
-    })),
-  }));
 
   if (numericalAttributes.length === 0) {
     return (
@@ -78,217 +174,42 @@ export default function ComparisonCharts({ result }: { result: ComparisonResult 
     );
   }
 
-  const renderChart = () => {
-    switch (chartType) {
-      case "bar":
-        return (
-          <BarChart data={attributeData}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="attribute" tick={{ fontSize: 10 }} />
-            <YAxis />
-            <Tooltip />
-            <Legend />
-            {result.items.map((item, i) => (
-              <Bar key={item} dataKey={item} fill={COLORS[i % COLORS.length]} />
-            ))}
-          </BarChart>
-        );
+  if (!palette) return null;
 
-      case "grouped-bar":
-        return (
-          <BarChart data={attributeData} barCategoryGap="20%">
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="attribute" tick={{ fontSize: 10 }} />
-            <YAxis />
-            <Tooltip />
-            <Legend />
-            {result.items.map((item, i) => (
-              <Bar key={item} dataKey={item} fill={COLORS[i % COLORS.length]} radius={[4, 4, 0, 0]} />
-            ))}
-          </BarChart>
-        );
+  const ctx: ChartContext = {
+    items: result.items,
+    data: result.data,
+    numericalAttributes,
+    palette,
+    axes: {},
+  };
 
-      case "radar":
-        return (
-          <RadarChart data={attributeData}>
-            <PolarGrid />
-            <PolarAngleAxis dataKey="attribute" tick={{ fontSize: 10 }} />
-            <PolarRadiusAxis />
-            <Tooltip />
-            <Legend />
-            {result.items.map((item, i) => (
-              <Radar
-                key={item}
-                dataKey={item}
-                stroke={COLORS[i % COLORS.length]}
-                fill={COLORS[i % COLORS.length]}
-                fillOpacity={0.2}
-              />
-            ))}
-          </RadarChart>
-        );
-
-      case "line":
-        return (
-          <LineChart data={attributeData}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="attribute" tick={{ fontSize: 10 }} />
-            <YAxis />
-            <Tooltip />
-            <Legend />
-            {result.items.map((item, i) => (
-              <Line
-                key={item}
-                dataKey={item}
-                stroke={COLORS[i % COLORS.length]}
-                strokeWidth={2}
-                dot={{ r: 4 }}
-              />
-            ))}
-          </LineChart>
-        );
-
-      case "scatter":
-        return (
-          <ScatterChart>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="x" name={numericalAttributes[0]} />
-            <YAxis dataKey="y" name={numericalAttributes[1]} />
-            <Tooltip cursor={{ strokeDasharray: "3 3" }} />
-            <Legend />
-            {scatterData.map((point, i) => (
-              <Scatter
-                key={point.name}
-                name={point.name}
-                data={[point]}
-                fill={COLORS[i % COLORS.length]}
-              />
-            ))}
-          </ScatterChart>
-        );
-
-      case "bubble":
-        return (
-          <ScatterChart>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="x" name={numericalAttributes[0]} />
-            <YAxis dataKey="y" name={numericalAttributes[1]} />
-            <Tooltip cursor={{ strokeDasharray: "3 3" }} />
-            <Legend />
-            {scatterData.map((point, i) => (
-              <Scatter
-                key={point.name}
-                name={point.name}
-                data={[point]}
-                fill={COLORS[i % COLORS.length]}
-              >
-                <Cell
-                  key={point.name}
-                  fill={COLORS[i % COLORS.length]}
-                  fillOpacity={0.7}
-                  style={{ transform: `scale(${point.z / 10})` }}
-                />
-              </Scatter>
-            ))}
-          </ScatterChart>
-        );
-
-      case "heatmap":
-        return (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm text-center">
-              <thead>
-                <tr>
-                  <th className="py-2 px-3 text-left text-muted-foreground">Attribute</th>
-                  {result.data.map((item) => (
-                    <th key={item.name as string} className="py-2 px-3 font-medium">
-                      {item.name as string}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {numericalAttributes.map((attr) => (
-                  <tr key={attr}>
-                    <td className="py-2 px-3 text-left text-muted-foreground">{attr}</td>
-                    {result.data.map((item) => {
-                      const val = Number(item[attr]) || 0;
-                      const intensity = heatmapMax > 0 ? val / heatmapMax : 0;
-                      return (
-                        <td
-                          key={item.name as string}
-                          className="py-2 px-3 rounded font-medium"
-                          style={{
-                            backgroundColor: `rgba(99, 102, 241, ${intensity})`,
-                            color: intensity > 0.5 ? "white" : "inherit",
-                          }}
-                        >
-                          {val}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        );
-
-      case "treemap":
-        return (
-          <Treemap
-            data={treemapData}
-            dataKey="size"
-            aspectRatio={4 / 3}
-          >
-            {treemapData.map((_, i) => (
-              <Cell key={i} fill={COLORS[i % COLORS.length]} />
-            ))}
-          </Treemap>
-        );
-
-      case "lollipop":
-        return (
-          <BarChart data={attributeData} barSize={2}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="attribute" tick={{ fontSize: 10 }} />
-            <YAxis />
-            <Tooltip />
-            <Legend />
-            {result.items.map((item, i) => (
-              <Bar key={item} dataKey={item} fill={COLORS[i % COLORS.length]} radius={[6, 6, 0, 0]} />
-            ))}
-          </BarChart>
-        );
-    }
+  const addChart = () => {
+    if (applicableKeys.length > 0) setSlots([...slots, applicableKeys[0]]);
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Charts</CardTitle>
-        <div className="flex gap-2 flex-wrap mt-2">
-          {CHART_TYPES.map(({ key, label }) => (
-            <Button
-              key={key}
-              size="sm"
-              variant={chartType === key ? "default" : "outline"}
-              onClick={() => setChartType(key)}
-            >
-              {label}
-            </Button>
-          ))}
-        </div>
-      </CardHeader>
-      <CardContent>
-        {chartType === "heatmap" ? (
-          renderChart()
-        ) : (
-          <ResponsiveContainer width="100%" height={400}>
-            {renderChart() as React.ReactElement}
-          </ResponsiveContainer>
-        )}
-      </CardContent>
-    </Card>
+    <div className="space-y-4">
+      <div className="flex justify-end">
+        <Button size="sm" variant="secondary" onClick={addChart}>
+          + Add chart
+        </Button>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {slots.map((key, i) => (
+          <ChartSlot
+            key={i}
+            chartKey={key}
+            ctx={ctx}
+            applicableKeys={applicableKeys}
+            onChangeType={(newKey) =>
+              setSlots(slots.map((s, idx) => (idx === i ? newKey : s)))
+            }
+            onRemove={() => setSlots(slots.filter((_, idx) => idx !== i))}
+          />
+        ))}
+      </div>
+    </div>
   );
 }
