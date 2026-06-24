@@ -3,6 +3,13 @@
 import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import {
+  CHART_REGISTRY,
+  DEFAULT_CHART_KEYS,
+  type ChartContext,
+  type ChartPalette,
+} from "@/components/charts/registry";
 
 const ReactECharts = dynamic(() => import("echarts-for-react"), { ssr: false });
 
@@ -16,11 +23,7 @@ interface ComparisonResult {
 // Reads the theme's chart colors from CSS variables, re-reading whenever the
 // html element's class changes (i.e. when dark mode is toggled).
 function useChartPalette() {
-  const [palette, setPalette] = useState<{
-    colors: string[];
-    text: string;
-    axis: string;
-  } | null>(null);
+  const [palette, setPalette] = useState<ChartPalette | null>(null);
 
   useEffect(() => {
     const read = () => {
@@ -40,17 +43,76 @@ function useChartPalette() {
     };
 
     read();
-
     const observer = new MutationObserver(read);
     observer.observe(document.documentElement, {
       attributes: true,
       attributeFilter: ["class"],
     });
-
     return () => observer.disconnect();
   }, []);
 
   return palette;
+}
+
+// A single chart slot: a type picker plus the rendered chart.
+function ChartSlot({
+  chartKey,
+  ctx,
+  applicableKeys,
+  onChangeType,
+  onRemove,
+}: {
+  chartKey: string;
+  ctx: ChartContext;
+  applicableKeys: string[];
+  onChangeType: (key: string) => void;
+  onRemove: () => void;
+}) {
+  const def = CHART_REGISTRY.find((d) => d.key === chartKey);
+  const usable = def && ctx.numericalAttributes.length >= def.minNumeric;
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
+        <select
+          value={chartKey}
+          onChange={(e) => onChangeType(e.target.value)}
+          className="h-9 rounded-md border bg-background px-2 text-sm"
+        >
+          {applicableKeys.map((key) => {
+            const d = CHART_REGISTRY.find((c) => c.key === key)!;
+            return (
+              <option key={key} value={key}>
+                {d.label}
+              </option>
+            );
+          })}
+        </select>
+        <button
+          onClick={onRemove}
+          className="text-muted-foreground hover:text-destructive text-sm"
+          aria-label="Remove chart"
+        >
+          ✕
+        </button>
+      </CardHeader>
+      <CardContent>
+        {usable ? (
+          <ReactECharts
+            key={chartKey}
+            option={def!.build(ctx)}
+            opts={{ renderer: "svg" }}
+            style={{ height: 360 }}
+            notMerge
+          />
+        ) : (
+          <p className="py-12 text-center text-sm text-muted-foreground">
+            This chart needs more numerical attributes.
+          </p>
+        )}
+      </CardContent>
+    </Card>
+  );
 }
 
 export default function ComparisonCharts({ result }: { result: ComparisonResult }) {
@@ -58,6 +120,14 @@ export default function ComparisonCharts({ result }: { result: ComparisonResult 
 
   const numericalAttributes = result.attributes.filter((attr) =>
     result.data.every((item) => typeof item[attr] === "number")
+  );
+
+  const applicableKeys = CHART_REGISTRY.filter(
+    (d) => numericalAttributes.length >= d.minNumeric
+  ).map((d) => d.key);
+
+  const [slots, setSlots] = useState<string[]>(() =>
+    DEFAULT_CHART_KEYS.filter((k) => CHART_REGISTRY.some((d) => d.key === k))
   );
 
   if (numericalAttributes.length === 0) {
@@ -72,43 +142,39 @@ export default function ComparisonCharts({ result }: { result: ComparisonResult 
 
   if (!palette) return null;
 
-  const option = {
-    color: palette.colors,
-    textStyle: { color: palette.text },
-    tooltip: { trigger: "axis" },
-    legend: { textStyle: { color: palette.text } },
-    grid: { left: 50, right: 20, top: 40, bottom: 40 },
-    xAxis: {
-      type: "category",
-      data: numericalAttributes,
-      axisLabel: { color: palette.axis, fontSize: 10 },
-    },
-    yAxis: {
-      type: "value",
-      axisLabel: { color: palette.axis },
-    },
-    series: result.items.map((item) => {
-      const row = result.data.find((d) => d.name === item);
-      return {
-        name: item,
-        type: "bar",
-        data: numericalAttributes.map((attr) => Number(row?.[attr] ?? 0)),
-      };
-    }),
+  const ctx: ChartContext = {
+    items: result.items,
+    data: result.data,
+    numericalAttributes,
+    palette,
+  };
+
+  const addChart = () => {
+    if (applicableKeys.length > 0) setSlots([...slots, applicableKeys[0]]);
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Charts</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <ReactECharts
-          option={option}
-          opts={{ renderer: "svg" }}
-          style={{ height: 400 }}
-        />
-      </CardContent>
-    </Card>
+    <div className="space-y-4">
+      <div className="flex justify-end">
+        <Button size="sm" variant="secondary" onClick={addChart}>
+          + Add chart
+        </Button>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {slots.map((key, i) => (
+          <ChartSlot
+            key={i}
+            chartKey={key}
+            ctx={ctx}
+            applicableKeys={applicableKeys}
+            onChangeType={(newKey) =>
+              setSlots(slots.map((s, idx) => (idx === i ? newKey : s)))
+            }
+            onRemove={() => setSlots(slots.filter((_, idx) => idx !== i))}
+          />
+        ))}
+      </div>
+    </div>
   );
 }
