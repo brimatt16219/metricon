@@ -6,25 +6,35 @@ export interface ChartPalette {
   axis: string;
 }
 
+// A user-selectable metric slot a chart exposes (e.g. scatter's X and Y).
+export interface AxisRole {
+  id: string;
+  label: string;
+}
+
 export interface ChartContext {
   items: string[];
   data: Record<string, string | number>[];
   numericalAttributes: string[];
   palette: ChartPalette;
+  axes: Record<string, string>; // roleId -> chosen attribute
 }
 
 export interface ChartDef {
   key: string;
   label: string;
-  minNumeric: number; // how many numeric attributes this chart needs
+  minNumeric: number;
+  roles: AxisRole[]; // metric slots the user can reassign
   build: (ctx: ChartContext) => EChartsOption;
 }
 
-// Pull one numeric value for an item/attribute pair.
 const val = (ctx: ChartContext, item: string, attr: string) =>
   Number(ctx.data.find((d) => d.name === item)?.[attr] ?? 0);
 
-// Shared styling every chart starts from.
+// Resolve a role to its chosen attribute, falling back to a sensible default.
+const axis = (ctx: ChartContext, role: string, fallbackIndex: number) =>
+  ctx.axes[role] ?? ctx.numericalAttributes[fallbackIndex] ?? ctx.numericalAttributes[0];
+
 const base = (p: ChartPalette): EChartsOption => ({
   color: p.colors,
   textStyle: { color: p.text },
@@ -38,6 +48,7 @@ export const CHART_REGISTRY: ChartDef[] = [
     key: "bar",
     label: "Grouped Bar",
     minNumeric: 1,
+    roles: [],
     build: (ctx) => ({
       ...base(ctx.palette),
       tooltip: { trigger: "axis" },
@@ -55,6 +66,7 @@ export const CHART_REGISTRY: ChartDef[] = [
     key: "hbar",
     label: "Horizontal Bar",
     minNumeric: 1,
+    roles: [],
     build: (ctx) => ({
       ...base(ctx.palette),
       tooltip: { trigger: "axis" },
@@ -72,6 +84,7 @@ export const CHART_REGISTRY: ChartDef[] = [
     key: "line",
     label: "Line",
     minNumeric: 1,
+    roles: [],
     build: (ctx) => ({
       ...base(ctx.palette),
       tooltip: { trigger: "axis" },
@@ -89,6 +102,7 @@ export const CHART_REGISTRY: ChartDef[] = [
     key: "area",
     label: "Area",
     minNumeric: 1,
+    roles: [],
     build: (ctx) => ({
       ...base(ctx.palette),
       tooltip: { trigger: "axis" },
@@ -107,6 +121,7 @@ export const CHART_REGISTRY: ChartDef[] = [
     key: "radar",
     label: "Radar",
     minNumeric: 1,
+    roles: [],
     build: (ctx) => ({
       ...base(ctx.palette),
       tooltip: {},
@@ -132,8 +147,13 @@ export const CHART_REGISTRY: ChartDef[] = [
     key: "scatter",
     label: "Scatter",
     minNumeric: 2,
+    roles: [
+      { id: "x", label: "X" },
+      { id: "y", label: "Y" },
+    ],
     build: (ctx) => {
-      const [xa, ya] = ctx.numericalAttributes;
+      const xa = axis(ctx, "x", 0);
+      const ya = axis(ctx, "y", 1);
       return {
         ...base(ctx.palette),
         tooltip: { trigger: "item" },
@@ -153,8 +173,9 @@ export const CHART_REGISTRY: ChartDef[] = [
     key: "pie",
     label: "Pie",
     minNumeric: 1,
+    roles: [{ id: "value", label: "Value" }],
     build: (ctx) => {
-      const attr = ctx.numericalAttributes[0];
+      const attr = axis(ctx, "value", 0);
       return {
         ...base(ctx.palette),
         tooltip: { trigger: "item" },
@@ -173,8 +194,9 @@ export const CHART_REGISTRY: ChartDef[] = [
     key: "doughnut",
     label: "Doughnut",
     minNumeric: 1,
+    roles: [{ id: "value", label: "Value" }],
     build: (ctx) => {
-      const attr = ctx.numericalAttributes[0];
+      const attr = axis(ctx, "value", 0);
       return {
         ...base(ctx.palette),
         tooltip: { trigger: "item" },
@@ -193,8 +215,9 @@ export const CHART_REGISTRY: ChartDef[] = [
     key: "funnel",
     label: "Funnel",
     minNumeric: 1,
+    roles: [{ id: "value", label: "Value" }],
     build: (ctx) => {
-      const attr = ctx.numericalAttributes[0];
+      const attr = axis(ctx, "value", 0);
       return {
         ...base(ctx.palette),
         tooltip: { trigger: "item" },
@@ -212,6 +235,7 @@ export const CHART_REGISTRY: ChartDef[] = [
     key: "heatmap",
     label: "Heatmap",
     minNumeric: 1,
+    roles: [],
     build: (ctx) => {
       const data: [number, number, number][] = [];
       ctx.items.forEach((it, xi) =>
@@ -241,8 +265,9 @@ export const CHART_REGISTRY: ChartDef[] = [
     key: "treemap",
     label: "Treemap",
     minNumeric: 1,
+    roles: [{ id: "value", label: "Value" }],
     build: (ctx) => {
-      const attr = ctx.numericalAttributes[0];
+      const attr = axis(ctx, "value", 0);
       return {
         ...base(ctx.palette),
         tooltip: { trigger: "item" },

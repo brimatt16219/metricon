@@ -69,25 +69,59 @@ function ChartSlot({
   onRemove: () => void;
 }) {
   const def = CHART_REGISTRY.find((d) => d.key === chartKey);
+  const numKey = ctx.numericalAttributes.join(",");
+  const [axes, setAxes] = useState<Record<string, string>>({});
+
+  // Reset metric choices to defaults when the chart type or numeric columns change.
+  useEffect(() => {
+    if (!def) return;
+    const next: Record<string, string> = {};
+    def.roles.forEach((role, i) => {
+      next[role.id] = ctx.numericalAttributes[i] ?? ctx.numericalAttributes[0];
+    });
+    setAxes(next);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chartKey, numKey]);
+
   const usable = def && ctx.numericalAttributes.length >= def.minNumeric;
+  const slotCtx: ChartContext = { ...ctx, axes };
 
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
-        <select
-          value={chartKey}
-          onChange={(e) => onChangeType(e.target.value)}
-          className="h-9 rounded-md border bg-background px-2 text-sm"
-        >
-          {applicableKeys.map((key) => {
-            const d = CHART_REGISTRY.find((c) => c.key === key)!;
-            return (
-              <option key={key} value={key}>
-                {d.label}
-              </option>
-            );
-          })}
-        </select>
+        <div className="flex flex-wrap items-center gap-2">
+          <select
+            value={chartKey}
+            onChange={(e) => onChangeType(e.target.value)}
+            className="h-9 rounded-md border bg-background px-2 text-sm"
+          >
+            {applicableKeys.map((key) => {
+              const d = CHART_REGISTRY.find((c) => c.key === key)!;
+              return (
+                <option key={key} value={key}>
+                  {d.label}
+                </option>
+              );
+            })}
+          </select>
+
+          {def?.roles.map((role) => (
+            <select
+              key={role.id}
+              value={axes[role.id] ?? ""}
+              onChange={(e) => setAxes({ ...axes, [role.id]: e.target.value })}
+              className="h-9 rounded-md border bg-background px-2 text-xs"
+              title={role.label}
+            >
+              {ctx.numericalAttributes.map((attr) => (
+                <option key={attr} value={attr}>
+                  {role.label}: {attr}
+                </option>
+              ))}
+            </select>
+          ))}
+        </div>
+
         <button
           onClick={onRemove}
           className="text-muted-foreground hover:text-destructive text-sm"
@@ -100,7 +134,7 @@ function ChartSlot({
         {usable ? (
           <ReactECharts
             key={chartKey}
-            option={def!.build(ctx)}
+            option={def!.build(slotCtx)}
             opts={{ renderer: "svg" }}
             style={{ height: 360 }}
             notMerge
@@ -147,6 +181,7 @@ export default function ComparisonCharts({ result }: { result: ComparisonResult 
     data: result.data,
     numericalAttributes,
     palette,
+    axes: {},
   };
 
   const addChart = () => {
