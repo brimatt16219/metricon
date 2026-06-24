@@ -1,8 +1,8 @@
 import anthropic
 import os
-import json
 from dotenv import load_dotenv
 from tavily import TavilyClient
+from utils import parse_claude_json
 
 load_dotenv()
 
@@ -44,11 +44,6 @@ Rules:
         messages=[{"role": "user", "content": prompt}],
     )
 
-    raw = message.content[0].text.strip()
-    if raw.startswith("```"):
-        raw = raw.split("```")[1]
-        if raw.startswith("json"):
-            raw = raw[4:]
-    parsed = json.loads(raw.strip())
+    parsed = parse_claude_json(message.content[0].text)
 
     return {"category": category, "items": parsed["items"]}

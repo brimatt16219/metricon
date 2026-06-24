@@ -1,7 +1,7 @@
 import anthropic
 import os
-import json
 from dotenv import load_dotenv
+from utils import parse_claude_json
 
 load_dotenv()
 
@@ -38,12 +38,7 @@ Rules:
         messages=[{"role": "user", "content": prompt}]
     )
 
-    raw = message.content[0].text.strip()
-    if raw.startswith("```"):
-        raw = raw.split("```")[1]
-        if raw.startswith("json"):
-            raw = raw[4:]
-    parsed = json.loads(raw.strip())
+    parsed = parse_claude_json(message.content[0].text)
 
     return {
         "items": items,
@@ -51,3 +46,59 @@ Rules:
         "data": parsed["data"],
         "recommendation": parsed["recommendation"]
     }
+
+def add_item(item: str, attributes: list[str], category: str | None = None) -> dict:
+    category_hint = f" in the category: {category}" if category else ""
+    attr_list = ", ".join(attributes)
+
+    prompt = f"""You are a comparison analysis assistant. For the item "{item}"{category_hint}, provide a value for each of these exact attributes: {attr_list}.
+
+Return ONLY a valid JSON object with this exact structure:
+{{
+  "name": "{item}",
+  "attribute name": "value"
+}}
+
+Rules:
+- Use the EXACT attribute names given above as the JSON keys
+- For numerical attributes (those with units like "Price (USD)") use numbers only, no units in the value
+- For non-numerical attributes use short descriptive strings
+- Include every attribute listed
+- Do not include any text outside the JSON object"""
+
+    message = client.messages.create(
+        model="claude-sonnet-4-6",
+        max_tokens=1024,
+        messages=[{"role": "user", "content": prompt}],
+    )
+
+    return {"item": parse_claude_json(message.content[0].text)}
+
+
+def add_attribute(items: list[str], attribute: str, category: str | None = None) -> dict:
+    category_hint = f" in the category: {category}" if category else ""
+    items_list = ", ".join(items)
+
+    prompt = f"""You are a comparison analysis assistant. For the attribute "{attribute}", provide its value for each of these items{category_hint}: {items_list}.
+
+Return ONLY a valid JSON object with this exact structure:
+{{
+  "values": {{
+    "item name": "value"
+  }}
+}}
+
+Rules:
+- Use the EXACT item names given above as the JSON keys
+- If "{attribute}" is numerical (e.g. a price, score, or measurement) use numbers only, no units in the value
+- If it is non-numerical use a short descriptive string
+- Include every item listed
+- Do not include any text outside the JSON object"""
+
+    message = client.messages.create(
+        model="claude-sonnet-4-6",
+        max_tokens=1024,
+        messages=[{"role": "user", "content": prompt}],
+    )
+
+    return {"attribute": attribute, "values": parse_claude_json(message.content[0].text)}
