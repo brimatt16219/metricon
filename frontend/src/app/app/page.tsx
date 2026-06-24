@@ -18,6 +18,7 @@ export default function Home() {
   const [category, setCategory] = useState("");
   const [itemInput, setItemInput] = useState("");
   const [error, setError] = useState("");
+  const [editing, setEditing] = useState(false);
   const [items, setItems] = useState<string[]>([]);
   const [result, setResult] = useState<ComparisonResult | null>(null);
   const [loading, setLoading] = useState(false);
@@ -85,6 +86,94 @@ export default function Home() {
       setError(e instanceof Error ? e.message : "Search failed.");
     } finally {
       setDiscovering(false);
+    }
+  };
+
+  const removeResultItem = (name: string) => {
+    if (!result) return;
+    setResult({
+      ...result,
+      items: result.items.filter((i) => i !== name),
+      data: result.data.filter((row) => row.name !== name),
+    });
+  };
+
+  const removeAttribute = (attr: string) => {
+    if (!result) return;
+    setResult({
+      ...result,
+      attributes: result.attributes.filter((a) => a !== attr),
+    });
+  };
+
+  const handleAddItem = async (name: string) => {
+    if (!result || !name.trim()) return;
+    setEditing(true);
+    setError("");
+
+    try {
+      const res = await fetch("http://localhost:8000/compare/add-item", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          item: name.trim(),
+          attributes: result.attributes,
+          category: category || null,
+        }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.detail || "Could not add that item.");
+      }
+
+      const data = await res.json();
+      setResult({
+        ...result,
+        items: [...result.items, name.trim()],
+        data: [...result.data, data.item],
+      });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not add that item.");
+    } finally {
+      setEditing(false);
+    }
+  };
+
+  const handleAddAttribute = async (attr: string) => {
+    if (!result || !attr.trim()) return;
+    setEditing(true);
+    setError("");
+
+    try {
+      const res = await fetch("http://localhost:8000/compare/add-attribute", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          items: result.items,
+          attribute: attr.trim(),
+          category: category || null,
+        }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.detail || "Could not add that attribute.");
+      }
+
+      const data = await res.json();
+      setResult({
+        ...result,
+        attributes: [...result.attributes, attr.trim()],
+        data: result.data.map((row) => ({
+          ...row,
+          [attr.trim()]: data.values[row.name as string] ?? "—",
+        })),
+      });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not add that attribute.");
+    } finally {
+      setEditing(false);
     }
   };
 
@@ -163,7 +252,16 @@ export default function Home() {
             </Button>
           </div>
 
-          {view === "grid" && <ComparisonGrid result={result} />}
+          {view === "grid" && (
+            <ComparisonGrid
+              result={result}
+              editing={editing}
+              onRemoveItem={removeResultItem}
+              onRemoveAttribute={removeAttribute}
+              onAddItem={handleAddItem}
+              onAddAttribute={handleAddAttribute}
+            />
+          )}
           {view === "charts" && <ComparisonCharts result={result} />}
 
           <div className="rounded-lg border p-4 bg-muted/50">
