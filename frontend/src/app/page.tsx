@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { LandingChart } from "@/components/LandingChart";
 
 export default function LandingPage() {
   return (
@@ -56,16 +57,34 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* CTA */}
-      <section className="max-w-5xl mx-auto px-4 py-20">
-        <div className="rounded-2xl border bg-card px-8 py-16 text-center">
-          <h2 className="text-3xl font-bold mb-4">Ready to compare?</h2>
-          <p className="text-muted-foreground mb-8 max-w-xl mx-auto">
-            Start your first comparison now — no sign-up required.
+      {/* Showcase — layered band */}
+      <section className="bg-muted py-20">
+        <div className="max-w-5xl mx-auto px-4">
+          <h2 className="text-3xl font-bold text-center mb-3">
+            See your data come to life
+          </h2>
+          <p className="text-muted-foreground text-center mb-10 max-w-2xl mx-auto">
+            Every comparison turns into interactive, customizable charts. Here&apos;s an
+            example comparing three electric vehicles across the metrics that matter.
           </p>
-          <Button asChild size="lg">
-            <Link href="/app">Launch metricon</Link>
-          </Button>
+          <div className="rounded-2xl border bg-card p-4 sm:p-6">
+            <LandingChart />
+          </div>
+        </div>
+      </section>
+
+      {/* CTA — layered band */}
+      <section className="bg-secondary py-20">
+        <div className="max-w-5xl mx-auto px-4">
+          <div className="rounded-2xl border bg-card px-8 py-16 text-center">
+            <h2 className="text-3xl font-bold mb-4">Ready to compare?</h2>
+            <p className="text-muted-foreground mb-8 max-w-xl mx-auto">
+              Start your first comparison now — no sign-up required.
+            </p>
+            <Button asChild size="lg">
+              <Link href="/app">Launch metricon</Link>
+            </Button>
+          </div>
         </div>
       </section>
     </main>
