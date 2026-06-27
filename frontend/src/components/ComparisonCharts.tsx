@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import {
   CHART_REGISTRY,
   DEFAULT_CHART_KEYS,
+  finalizeOption,
   type ChartContext,
   type ChartPalette,
 } from "@/components/charts/registry";
@@ -134,9 +135,9 @@ function ChartSlot({
         {usable ? (
           <ReactECharts
             key={chartKey}
-            option={def!.build(slotCtx)}
+            option={finalizeOption(def!.build(slotCtx))}
             opts={{ renderer: "svg" }}
-            style={{ height: 360 }}
+            style={{ height: 400 }}
             notMerge
           />
         ) : (

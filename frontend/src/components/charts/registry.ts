@@ -38,7 +38,7 @@ const axis = (ctx: ChartContext, role: string, fallbackIndex: number) =>
 const base = (p: ChartPalette): EChartsOption => ({
   color: p.colors,
   textStyle: { color: p.text },
-  legend: { textStyle: { color: p.text }, type: "scroll" },
+  legend: { textStyle: { color: p.text }, type: "scroll", top: 0, left: "center" },
 });
 
 const axisStyle = (p: ChartPalette) => ({ color: p.axis, fontSize: 10 });
@@ -135,6 +135,7 @@ export const CHART_REGISTRY: ChartDef[] = [
       series: [
         {
           type: "radar",
+          emphasis: { disabled: true },
           data: ctx.items.map((item) => ({
             name: item,
             value: ctx.numericalAttributes.map((a) => val(ctx, item, a)),
@@ -157,9 +158,23 @@ export const CHART_REGISTRY: ChartDef[] = [
       return {
         ...base(ctx.palette),
         tooltip: { trigger: "item" },
-        grid: { left: 50, right: 20, top: 40, bottom: 40 },
-        xAxis: { type: "value", name: xa, nameTextStyle: { color: ctx.palette.axis }, axisLabel: axisStyle(ctx.palette) },
-        yAxis: { type: "value", name: ya, nameTextStyle: { color: ctx.palette.axis }, axisLabel: axisStyle(ctx.palette) },
+        grid: { left: 60, right: 30, top: 40, bottom: 56 },
+        xAxis: {
+          type: "value",
+          name: xa,
+          nameLocation: "middle",
+          nameGap: 32,
+          nameTextStyle: { color: ctx.palette.axis },
+          axisLabel: axisStyle(ctx.palette),
+        },
+        yAxis: {
+          type: "value",
+          name: ya,
+          nameLocation: "middle",
+          nameGap: 44,
+          nameTextStyle: { color: ctx.palette.axis },
+          axisLabel: axisStyle(ctx.palette),
+        },
         series: ctx.items.map((item) => ({
           name: item,
           type: "scatter",
@@ -281,5 +296,46 @@ export const CHART_REGISTRY: ChartDef[] = [
     },
   },
 ];
+
+// Applied to every built chart: kills the hover-emphasis flicker and keeps
+// long category-axis labels from overlapping each other.
+export function finalizeOption(option: EChartsOption): EChartsOption {
+  const seriesList = Array.isArray(option.series)
+    ? option.series
+    : option.series
+    ? [option.series]
+    : [];
+  seriesList.forEach((s) => {
+    (s as { emphasis?: { disabled: boolean } }).emphasis = { disabled: true };
+  });
+
+  const fixCategoryAxis = (ax: unknown) => {
+    if (
+      ax &&
+      typeof ax === "object" &&
+      (ax as { type?: string }).type === "category"
+    ) {
+      const a = ax as { axisLabel?: Record<string, unknown> };
+      a.axisLabel = {
+        ...(a.axisLabel ?? {}),
+        interval: 0,
+        rotate: 20,
+        hideOverlap: true,
+        margin: 16,
+      };
+      // Give the rotated labels room so they aren't clipped at the bottom.
+      if (
+        option.grid &&
+        typeof option.grid === "object" &&
+        !Array.isArray(option.grid)
+      ) {
+        (option.grid as { bottom?: number }).bottom = 70;
+      }
+    }
+  };
+  fixCategoryAxis(option.xAxis);
+
+  return option;
+}
 
 export const DEFAULT_CHART_KEYS = ["bar", "line", "radar", "scatter", "pie"];
