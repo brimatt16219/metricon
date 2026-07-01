@@ -147,3 +147,6 @@ backend/venv/
 __pycache__/
 *.pyc
 .env
+
+# Local Claude Code context (personal Obsidian Vault path, not shared)
+/CLAUDE.md
